@@ -1,15 +1,15 @@
+"use client";
 
-'use client';
+import React, { useState, useEffect, type FC } from "react";
+import Image from "next/image";
+import type { Match, UserPredictionInput } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { CalendarDays, Clock, Save, Lock } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
-import React, { useState, useEffect, type FC } from 'react';
-import Image from 'next/image';
-import type { Match, UserPredictionInput } from '@/lib/types';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { CalendarDays, Clock, Save, Lock } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-
+// Consider showing a local error message or relying on parent's toast
 interface MatchCardProps {
   match: Match;
   currentPrediction?: UserPredictionInput;
@@ -17,13 +17,22 @@ interface MatchCardProps {
   isLocked?: boolean;
 }
 
-export const MatchCard: FC<MatchCardProps> = ({ match, currentPrediction, onSavePrediction, isLocked }) => {
-  const [homeGuess, setHomeGuess] = useState<string>(currentPrediction?.homeScoreGuess?.toString() ?? '');
-  const [awayGuess, setAwayGuess] = useState<string>(currentPrediction?.awayScoreGuess?.toString() ?? '');
+export const MatchCard: FC<MatchCardProps> = ({
+  match,
+  currentPrediction,
+  onSavePrediction,
+  isLocked,
+}) => {
+  const [homeGuess, setHomeGuess] = useState<string>(
+    currentPrediction?.homeScoreGuess?.toString() ?? ""
+  );
+  const [awayGuess, setAwayGuess] = useState<string>(
+    currentPrediction?.awayScoreGuess?.toString() ?? ""
+  );
 
   useEffect(() => {
-    setHomeGuess(currentPrediction?.homeScoreGuess?.toString() ?? '');
-    setAwayGuess(currentPrediction?.awayScoreGuess?.toString() ?? '');
+    setHomeGuess(currentPrediction?.homeScoreGuess?.toString() ?? "");
+    setAwayGuess(currentPrediction?.awayScoreGuess?.toString() ?? "");
   }, [currentPrediction]);
 
   const handleSave = () => {
@@ -41,17 +50,37 @@ export const MatchCard: FC<MatchCardProps> = ({ match, currentPrediction, onSave
   };
 
   return (
-    <Card className={`shadow-lg hover:shadow-xl transition-shadow duration-300 ${isLocked ? 'opacity-75' : ''}`}>
+    <Card
+      className={`shadow-lg hover:shadow-xl transition-shadow duration-300 ${
+        isLocked ? "opacity-75" : ""
+      }`}
+    >
       <CardHeader className="pb-2">
         <CardTitle className="text-lg font-headline flex items-center justify-between">
           <div className="flex items-center gap-2 truncate">
-            {match.homeTeamLogo && <Image src={match.homeTeamLogo} alt={`${match.homeTeam} logo`} width={24} height={24} data-ai-hint="football logo" />}
+            {match.homeTeamLogo && (
+              <Image
+                src={match.homeTeamLogo}
+                alt={`${match.homeTeam} logo`}
+                width={24}
+                height={24}
+                data-ai-hint="football logo"
+              />
+            )}
             <span className="truncate">{match.homeTeam}</span>
           </div>
           <span className="text-muted-foreground text-sm px-1">vs</span>
           <div className="flex items-center gap-2 truncate">
             <span className="truncate">{match.awayTeam}</span>
-            {match.awayTeamLogo && <Image src={match.awayTeamLogo} alt={`${match.awayTeam} logo`} width={24} height={24} data-ai-hint="football logo" />}
+            {match.awayTeamLogo && (
+              <Image
+                src={match.awayTeamLogo}
+                alt={`${match.awayTeam} logo`}
+                width={24}
+                height={24}
+                data-ai-hint="football logo"
+              />
+            )}
           </div>
         </CardTitle>
       </CardHeader>
@@ -68,7 +97,9 @@ export const MatchCard: FC<MatchCardProps> = ({ match, currentPrediction, onSave
         </div>
         <div className="grid grid-cols-2 gap-3 items-end">
           <div>
-            <Label htmlFor={`home-score-${match.id}`} className="text-xs text-muted-foreground">{match.homeTeam}</Label>
+            <Label htmlFor={`home-score-${match.id}`} className="text-xs text-muted-foreground">
+              {match.homeTeam}
+            </Label>
             <Input
               id={`home-score-${match.id}`}
               type="number"
@@ -82,7 +113,9 @@ export const MatchCard: FC<MatchCardProps> = ({ match, currentPrediction, onSave
             />
           </div>
           <div>
-            <Label htmlFor={`away-score-${match.id}`} className="text-xs text-muted-foreground">{match.awayTeam}</Label>
+            <Label htmlFor={`away-score-${match.id}`} className="text-xs text-muted-foreground">
+              {match.awayTeam}
+            </Label>
             <Input
               id={`away-score-${match.id}`}
               type="number"
@@ -98,14 +131,14 @@ export const MatchCard: FC<MatchCardProps> = ({ match, currentPrediction, onSave
         </div>
       </CardContent>
       <CardFooter>
-        <Button 
-          onClick={handleSave} 
+        <Button
+          onClick={handleSave}
           className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
           disabled={isLocked}
           aria-disabled={isLocked}
         >
           {isLocked ? <Lock size={18} className="mr-2" /> : <Save size={18} className="mr-2" />}
-          {isLocked ? 'Predictions Locked' : 'Save Prediction'}
+          {isLocked ? "Predictions Locked" : "Save Prediction"}
         </Button>
       </CardFooter>
     </Card>
