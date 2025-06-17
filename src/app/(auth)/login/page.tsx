@@ -1,22 +1,32 @@
+"use client";
 
-'use client';
-
-import { useState, type FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Trophy, KeyRound, AtSign } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { signInWithEmailAndPassword, type FirebaseError } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Trophy, KeyRound, AtSign } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { signInWithEmailAndPassword, type FirebaseError } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { useUser } from "@/context/UserContext";
 
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  // const { setEmail } = useUser();
+  // const [email, setEmail] = useState("");
+  const { setEmail: setUserContextEmail } = useUser(); // Context'ten gelen setEmail'i yeniden adlandırdık
+  const [email, setEmailInput] = useState("");
+  const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = async (e: FormEvent) => {
@@ -25,27 +35,35 @@ export default function LoginPage() {
 
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      // setEmail(email); // Context'e email kaydet
+
+      setUserContextEmail(email); // Yeniden adlandırılmış context fonksiyonunu kullanıyoruz
       // User is signed in.
-      localStorage.setItem('showPromotionalPopup', 'true'); 
+      localStorage.setItem("showPromotionalPopup", "true");
       toast({
-        title: 'Login Successful!',
-        description: 'Welcome back to LeagueLines.',
-        variant: 'default',
+        title: "Login Successful!",
+        description: "Welcome back to LeagueLines.",
+        variant: "default",
       });
-      router.replace('/leagues');
+      router.replace("/leagues");
     } catch (error: any) {
       console.error("Login error:", error);
-      let description = 'An unexpected error occurred during login.';
-      if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-        description = 'Invalid email or password. Please check your credentials or ensure you have an account.';
+      let description = "An unexpected error occurred during login.";
+      if (
+        error.code === "auth/invalid-credential" ||
+        error.code === "auth/user-not-found" ||
+        error.code === "auth/wrong-password"
+      ) {
+        description =
+          "Invalid email or password. Please check your credentials or ensure you have an account.";
       } else if (error.message) {
         description = error.message;
       }
-      
+
       toast({
-        title: 'Login Failed',
+        title: "Login Failed",
         description: description,
-        variant: 'destructive',
+        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
@@ -72,7 +90,8 @@ export default function LoginPage() {
                 type="email"
                 placeholder="you@example.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                // onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => setEmailInput(e.target.value)}
                 required
                 className="pl-10"
                 disabled={isLoading}
@@ -95,13 +114,23 @@ export default function LoginPage() {
               />
             </div>
           </div>
-          <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" disabled={isLoading}>
-            {isLoading ? 'Logging in...' : 'Log In'}
+          <Button
+            type="submit"
+            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+            disabled={isLoading}
+          >
+            {isLoading ? "Logging in..." : "Log In"}
           </Button>
         </form>
       </CardContent>
       <CardFooter className="text-center text-sm text-muted-foreground">
-        <p>Don't have an account? <a href="#" className="text-primary hover:underline">Sign up</a> (coming soon)</p>
+        <p>
+          Don't have an account?{" "}
+          <a href="#" className="text-primary hover:underline">
+            Sign up
+          </a>{" "}
+          (coming soon)
+        </p>
       </CardFooter>
     </Card>
   );

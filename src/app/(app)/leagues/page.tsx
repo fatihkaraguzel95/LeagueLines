@@ -21,6 +21,7 @@ import { sendInvitationEmail } from "./actions"; // Mock action
 import { DEMO_LEAGUE_ID, DEMO_LEAGUE_NAME, DEMO_LEAGUE_PARTICIPANTS_COUNT } from "@/lib/constants";
 import { auth } from "@/lib/firebase"; // Auth is still used
 import type { User } from "firebase/auth";
+import { useUser } from "@/context/UserContext";
 
 interface League {
   id: string;
@@ -41,27 +42,84 @@ const LeaguesPage: FC = () => {
   const [isCreatingLeague, setIsCreatingLeague] = useState(false);
   const [isLoadingLeagues, setIsLoadingLeagues] = useState(true); // For initial setup
   const [addMemberInputs, setAddMemberInputs] = useState<Record<string, string>>({});
+  const { email: userEmailFromContext } = useUser(); // Hook'u bileşenin en üst seviyesinde çağırın
+  const loadLeagues = useCallback((emails: string[]) => {
+    setIsLoadingLeagues(true);
 
+    const demoLeague: League = {
+      id: DEMO_LEAGUE_ID,
+      name: DEMO_LEAGUE_NAME,
+      invitedEmails: emails,
+      isDemo: false,
+    };
+    // For this revert, we'll just start with the demo league.
+    // User-created leagues will be added to `leagues` state but not persisted beyond session unless localStorage is used.
+    setLeagues([demoLeague]);
+    setAddMemberInputs({ [DEMO_LEAGUE_ID]: "" });
+    setIsLoadingLeagues(false);
+  }, []);
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
       setCurrentUser(user);
     });
-    const fetchEmailFromFirebase = async () => {
+
+    const fetchDataFromFirebase = async (contextEmail: string | null) => {
       try {
-        const response = await fetch(
-          "https://leaguelines-default-rtdb.europe-west1.firebasedatabase.app/Emails/ad.json"
+        type UserType = {
+          username: string;
+          name: string;
+          email: string;
+          leagues: string[];
+        };
+        // Tüm userlar cekiliyor
+        const usersResponse = await fetch(
+          "https://leaguelines-default-rtdb.europe-west1.firebasedatabase.app/users.json"
         );
-        const email = await response.json();
-        const emailsArray = Array.isArray(email)
-          ? email // zaten array ise olduğu gibi al
-          : [email];
-        debugger;
-        if (emailsArray) {
-          setInviteEmails(email); // Mevcut inputa maili set eder
-          loadLeagues(emailsArray);
+        const usersData: Record<string, UserType> = await usersResponse.json();
+        let foundUserId: string | null = null;
+        let userLeagues: string[] = [];
+
+        // login olunan email ile userın bılgılerı alınıyor Hangi liglere kayıtlı bulunuyor
+        for (const id in usersData) {
+          if (usersData[id].email === contextEmail) {
+            foundUserId = id;
+            userLeagues = usersData[id].leagues || [];
+            break;
+          }
         }
+        // ID kontrolü
+        if (!foundUserId) {
+          toast({
+            title: "Kullanıcı Bulunamadı",
+            description: `Veritabanında ${contextEmail} e-postasına sahip kullanıcı bulunamadı. Demo lig gösteriliyor.`,
+            variant: "destructive",
+          });
+          return;
+        }
+        // ID üzerinden bulunan lig kontorlü
+        const leagueId = userLeagues[0];
+        if (!leagueId) {
+          toast({
+            title: "Lig Bulunamadı",
+            description: `${contextEmail} kullanıcısının kayıtlı olduğu bir lig bulunamadı. Demo lig gösteriliyor.`,
+            variant: "default",
+          });
+          return;
+        }
+        // ilgili ligdeki oyuncular cekiliyor
+        const leaguePlayersResponse = await fetch(
+          `https://leaguelines-default-rtdb.europe-west1.firebasedatabase.app/leagues/${leagueId}/players.json`
+        );
+        const leaguePlayers: string[] = await leaguePlayersResponse.json();
+
+        const filteredUsers = Object.entries(usersData).filter(([key, user]) =>
+          leaguePlayers.includes(key)
+        );
+
+        const usernamesArray = filteredUsers.map(([key, user]) => user.username);
+
+        loadLeagues(usernamesArray);
       } catch (error) {
-        console.error("Firebase'den email alınırken hata:", error);
         toast({
           title: "Firebase Hatası",
           description: "Email verisi alınamadı.",
@@ -70,69 +128,16 @@ const LeaguesPage: FC = () => {
       }
     };
 
-    fetchEmailFromFirebase();
-
+    if (currentUser && userEmailFromContext) {
+      fetchDataFromFirebase(userEmailFromContext);
+    } else {
+      if (!currentUser) console.log("Firebase auth durumu bekleniyor...");
+      if (!userEmailFromContext) console.log("Kullanıcı e-postası context'ten bekleniyor...");
+      if (isLoadingLeagues && (!currentUser || !userEmailFromContext)) {
+      }
+    }
     return () => unsubscribe();
-  }, []);
-
-  // Load initial mock/demo league and locally stored leagues
-  const loadLeagues = useCallback((emails: string[]) => {
-    setIsLoadingLeagues(true);
-
-    debugger;
-    const demoLeague: League = {
-      id: DEMO_LEAGUE_ID,
-      name: DEMO_LEAGUE_NAME,
-      invitedEmails: emails,
-      isDemo: true,
-    };
-    // For this revert, we'll just start with the demo league.
-    // User-created leagues will be added to `leagues` state but not persisted beyond session unless localStorage is used.
-    setLeagues([demoLeague]);
-    setAddMemberInputs({ [DEMO_LEAGUE_ID]: "" });
-    setIsLoadingLeagues(false);
-  }, []);
-
-  // const loadLeagues = useCallback(async () => {
-  //   setIsLoadingLeagues(true);
-
-  //   try {
-  //     // Burada kendi API endpoint'inizi kullanın
-  //     const response = await fetch("/api/leagues");
-
-  //     if (!response.ok) {
-  //       throw new Error("Failed to fetch leagues");
-  //     }
-
-  //     const leaguesData: League[] = await response.json();
-
-  //     // Gelen ligler varsa state'e set et
-  //     if (leaguesData.length > 0) {
-  //       setLeagues(leaguesData);
-  //       // Üyeleri ekleme inputu için örnek boş string olarak set edelim
-  //       const addMemberInputsState = leaguesData.reduce((acc, league) => {
-  //         acc[league.id] = "";
-  //         return acc;
-  //       }, {} as Record<string, string>);
-  //       setAddMemberInputs(addMemberInputsState);
-  //     } else {
-  //       // Eğer veri boşsa, boş liste set edebiliriz
-  //       setLeagues([]);
-  //       setAddMemberInputs({});
-  //     }
-  //   } catch (error) {
-  //     console.error("Error loading leagues:", error);
-  //     // Hata durumunda da boş liste set edelim veya hata mesajı gösterelim
-  //     setLeagues([]);
-  //     setAddMemberInputs({});
-  //   }
-
-  //   setIsLoadingLeagues(false);
-  // }, []);
-
-  // useEffect(() => {
-  //   loadLeagues();
-  // }, [loadLeagues]);
+  }, [currentUser, userEmailFromContext, loadLeagues, toast]);
 
   const handleCreateLeagueSubmit = useCallback(
     async (e: FormEvent) => {
