@@ -1,0 +1,170 @@
+
+'use client';
+
+import type { FC } from 'react';
+import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { getUpcomingMatches } from '@/lib/mock-data';
+import type { Match, UserPredictions } from '@/lib/types';
+import { useToast } from "@/hooks/use-toast";
+import { Lock, Eye, RefreshCw } from 'lucide-react';
+import Image from 'next/image';
+import { fetchMatchResults } from './actions';
+
+const ResultsPage: FC = () => {
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [predictions, setPredictions] = useState<UserPredictions>({});
+  const [isLocked, setIsLocked] = useState<boolean>(false);
+  const [isLoadingScores, setIsLoadingScores] = useState<boolean>(false);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const initialMatches = getUpcomingMatches();
+    setMatches(initialMatches);
+
+    const storedPredictions = localStorage.getItem('userPredictions');
+    if (storedPredictions) {
+      setPredictions(JSON.parse(storedPredictions));
+    }
+    const lockedStatus = localStorage.getItem('predictionsLocked');
+    if (lockedStatus) {
+      const locked = JSON.parse(lockedStatus);
+      setIsLocked(locked);
+      // If already locked, try to fetch scores on load
+      if (locked) {
+        handleFetchScores(initialMatches);
+      }
+    }
+  }, []);
+
+  const handleLockPredictions = () => {
+    localStorage.setItem('predictionsLocked', JSON.stringify(true));
+    setIsLocked(true);
+    toast({
+      title: "Predictions Locked!",
+      description: "Your predictions for this week are now locked. You can now try to fetch results.",
+      variant: "default",
+    });
+    handleFetchScores(matches); // Fetch scores immediately after locking
+  };
+
+  const handleFetchScores = async (currentMatchData: Match[]) => {
+    if (!isLocked && !JSON.parse(localStorage.getItem('predictionsLocked') || 'false')) {
+        toast({
+            title: "Unlock First",
+            description: "Please lock your predictions before fetching scores.",
+            variant: "destructive",
+        });
+        return;
+    }
+    setIsLoadingScores(true);
+    try {
+      const updatedMatchesWithResults = await fetchMatchResults(currentMatchData);
+      setMatches(updatedMatchesWithResults);
+      toast({
+        title: "Scores Updated",
+        description: "Live scores have been fetched (or simulated).",
+        variant: "default",
+      });
+    } catch (error) {
+      console.error("Failed to fetch scores:", error);
+      toast({
+        title: "Error Fetching Scores",
+        description: "Could not retrieve live scores at this time.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingScores(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-2">
+          <Eye size={28} className="text-primary" />
+          <h2 className="text-2xl font-bold font-headline">My Predictions & Results</h2>
+        </div>
+        {!isLocked ? (
+          <Button onClick={handleLockPredictions} variant="destructive" className="bg-destructive hover:bg-destructive/90">
+            <Lock size={18} className="mr-2" />
+            Lock All Predictions
+          </Button>
+        ) : (
+          <Button onClick={() => handleFetchScores(matches)} disabled={isLoadingScores} variant="outline">
+            <RefreshCw size={18} className={`mr-2 ${isLoadingScores ? 'animate-spin' : ''}`} />
+            {isLoadingScores ? 'Refreshing...' : 'Refresh Scores'}
+          </Button>
+        )}
+      </div>
+
+      {isLocked && (
+        <div className="mb-6 p-4 bg-secondary text-secondary-foreground rounded-md shadow">
+          <p className="font-semibold">Your predictions for this gameweek are locked.</p>
+          <p className="text-sm">Results will be updated here as matches conclude. You might need to refresh.</p>
+        </div>
+      )}
+
+      {matches.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {matches.map(match => {
+            const prediction = predictions[match.id];
+            const hasActualResult = typeof match.homeScoreActual === 'number' && typeof match.awayScoreActual === 'number';
+
+            return (
+              <Card key={match.id} className="shadow-md flex flex-col">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg font-headline flex items-center justify-between">
+                    <div className="flex items-center gap-2 truncate">
+                      {match.homeTeamLogo && <Image src={match.homeTeamLogo} alt={`${match.homeTeam} logo`} width={20} height={20} data-ai-hint="football logo"/>}
+                      <span className="truncate">{match.homeTeam}</span>
+                    </div>
+                    <span className="text-muted-foreground text-sm px-1">vs</span>
+                    <div className="flex items-center gap-2 truncate">
+                      {match.awayTeamLogo && <Image src={match.awayTeamLogo} alt={`${match.awayTeam} logo`} width={20} height={20} data-ai-hint="football logo"/>}
+                      <span className="truncate">{match.awayTeam}</span>
+                    </div>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pb-3 flex-grow">
+                  <p className="text-xs text-muted-foreground mb-2 text-center">{match.matchDate} - {match.kickOffTime}</p>
+                  
+                  <div className="text-center mb-2">
+                    <p className="text-sm font-medium">Your Prediction:</p>
+                    {prediction ? (
+                      <p className="text-xl font-bold">
+                        {prediction.homeScoreGuess} - {prediction.awayScoreGuess}
+                      </p>
+                    ) : (
+                      <p className="text-md text-muted-foreground italic">No prediction</p>
+                    )}
+                  </div>
+
+                  {isLocked && (
+                    <div className="text-center mt-2 pt-2 border-t border-border">
+                      <p className="text-sm font-medium">Actual Result:</p>
+                      {hasActualResult ? (
+                        <p className="text-xl font-bold text-primary">
+                          {match.homeScoreActual} - {match.awayScoreActual}
+                        </p>
+                      ) : (
+                        <p className="text-md text-muted-foreground italic">Not yet concluded or updated</p>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+                {/* Optional: Add CardFooter if needed for actions per card */}
+              </Card>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="text-muted-foreground">No upcoming matches found.</p>
+      )}
+    </>
+  );
+};
+
+export default ResultsPage;
+
