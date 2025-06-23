@@ -1,170 +1,167 @@
-
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { MatchCard } from '@/components/bets/match-card';
-import { getUpcomingMatches } from '@/lib/mock-data';
-import type { Match, UserPredictions } from '@/lib/types';
-import { useToast } from "@/hooks/use-toast";
+import { ref, get, set } from 'firebase/database';
+import { database, auth } from '@/lib/firebase';
 import { Goal } from 'lucide-react';
-import { PromotionalPopup } from '@/components/ads/promotional-popup';
-import { auth } from '@/lib/firebase';
-import type { User } from 'firebase/auth';
-import { Button } from '@/components/ui/button';
+import type { UserPredictionInput } from "@/lib/types"; // tipini burada da import et
+
+type Match = {
+  id: string;
+  homeTeam: string;
+  awayTeam: string;
+  matchDate: string;
+  kickOffTime: string;
+  results?: Record<string, { homeScore: number; awayScore: number }>;
+  userPrediction?: UserPredictionInput; // yeni ekledik!
+};
 
 export default function DashboardPage() {
   const [matches, setMatches] = useState<Match[]>([]);
-  const [predictions, setPredictions] = useState<UserPredictions>({});
-  const [isLocked, setIsLocked] = useState<boolean>(false);
-  const [showPromo, setShowPromo] = useState<boolean>(false);
-  const { toast } = useToast();
-  const [currentUser, setCurrentUser] = useState<User | null>(auth.currentUser);
-  const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(user => {
-      setCurrentUser(user);
-      if (!user) {
-        setPredictions({}); // Clear predictions if user logs out
-        setIsLocked(false);
-      }
-    });
-    const leagueId = localStorage.getItem('selectedLeagueId');
+    const unsub = auth.onAuthStateChanged(user => setCurrentUser(user));
+    const leagueId = localStorage.getItem('selectedLeagueId') ?? 'superlig2025';
     setSelectedLeagueId(leagueId);
 
-    // Clear predictions & lock status when component mounts or league context might change
-    setPredictions({});
-    setIsLocked(false);
+    if (!leagueId) {
+      setIsLoadingData(false);
+      setMatches([]);
+      return () => unsub();
+    }
 
-    return () => unsubscribe();
-  }, []); // Runs once on mount to set up auth listener
-
-  // Effect to load data when currentUser or selectedLeagueId changes
-  useEffect(() => {
     setIsLoadingData(true);
-    setMatches(getUpcomingMatches()); // Mock matches
 
-    const shouldShowPromo = localStorage.getItem('showPromotionalPopup') === 'true';
-    if (shouldShowPromo) {
-      setShowPromo(true);
-      localStorage.removeItem('showPromotionalPopup'); // Show only once
-    }
-    
-    if (currentUser && selectedLeagueId) {
-      // Load predictions and lock status from localStorage (mock persistence)
-      const storedPredictions = localStorage.getItem(`mock_predictions_${currentUser.uid}_${selectedLeagueId}`);
-      if (storedPredictions) setPredictions(JSON.parse(storedPredictions));
-      else setPredictions({}); // Ensure predictions is an empty object if nothing stored
-      const storedLockStatus = localStorage.getItem(`mock_lock_${currentUser.uid}_${selectedLeagueId}`);
-      setIsLocked(storedLockStatus === 'true');
-    } else {
-      // Clear if no user or league selected
-      setPredictions({});
-      setIsLocked(false);
-    }
+    const fetchMatches = async () => {
+      try {
+        const snapshot = await get(ref(database, `leagues/${leagueId}/matches`));
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          const matchArray: Match[] = Object.entries(data).map(([key, value]: [string, any]) => {
+            let matchDate = '';
+            let kickOffTime = '';
+            if (value.date) {
+              const d = new Date(value.date);
+              matchDate = d.toLocaleDateString();
+              kickOffTime = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
 
-    setIsLoadingData(false);
-  }, [currentUser, selectedLeagueId]);
+            // KULLANICININ TAHMİNİ VARSA AL
+            let userPrediction: UserPredictionInput | undefined = undefined;
+            if (
+              value.results &&
+              currentUser &&
+              value.results[currentUser.uid]
+            ) {
+              userPrediction = {
+                homeScoreGuess: value.results[currentUser.uid].homeScore,
+                awayScoreGuess: value.results[currentUser.uid].awayScore,
+              };
+            }
 
-
-  const handleSavePrediction = useCallback((matchId: string, homeScoreGuess: number, awayScoreGuess: number) => {
-    if (!currentUser || !selectedLeagueId) {
-      toast({ title: "Error", description: "User or league not identified.", variant: "destructive" });
-      return;
-    }
-    if (isLocked) {
-      toast({ title: "Predictions Locked", description: "Predictions cannot be changed.", variant: "destructive" });
-      return;
-    }
-    if (homeScoreGuess < 0 || awayScoreGuess < 0 || isNaN(homeScoreGuess) || isNaN(awayScoreGuess)) {
-      toast({ title: "Invalid Prediction", description: "Scores must be non-negative.", variant: "destructive" });
-      return;
-    }
-
-    setPredictions(prevPredictions => {
-      const updatedPredictions = { ...prevPredictions, [matchId]: { homeScoreGuess, awayScoreGuess } };
-      // Persist to localStorage for mock behavior
-      if (currentUser && selectedLeagueId) {
-        localStorage.setItem(`mock_predictions_${currentUser.uid}_${selectedLeagueId}`, JSON.stringify(updatedPredictions));
+            return {
+              id: key,
+              homeTeam: value.teams[0] || "",
+              awayTeam: value.teams[1] || "",
+              matchDate,
+              kickOffTime,
+              results: value.results ?? {},
+              userPrediction,
+            };
+          });
+          setMatches(matchArray);
+        } else {
+          setMatches([]);
+        }
+      } catch (error) {
+        setMatches([]);
       }
-      return updatedPredictions;
-    });
-    
-    const match = matches.find(m => m.id === matchId);
-    toast({
-      title: "Prediction Saved!",
-      description: `Your prediction for ${match?.homeTeam} vs ${match?.awayTeam} (${homeScoreGuess}-${awayScoreGuess}) saved (mock).`,
-      variant: "default",
-    });
-  }, [currentUser, selectedLeagueId, isLocked, toast, matches]);
+      setIsLoadingData(false);
+    };
 
-  const handleClosePromo = useCallback(() => {
-    setShowPromo(false);
-  }, []);
-
-  const handleLockPredictionsLocal = useCallback(() => {
-    if (!currentUser || !selectedLeagueId) {
-        toast({ title: "Error", description: "User or league not identified.", variant: "destructive" });
-        return;
+    // currentUser geldikten sonra fetch et
+    if (currentUser) {
+      fetchMatches();
     }
-    setIsLocked(true);
-    // Persist lock status to localStorage
-    if (currentUser && selectedLeagueId) {
-       localStorage.setItem(`mock_lock_${currentUser.uid}_${selectedLeagueId}`, 'true');
+
+    return () => unsub();
+  }, [currentUser]);
+
+  // (Diğer kodlar aynı kalıyor...)
+
+  const handleSavePrediction = async (
+    matchId: string,
+    homeScore: number,
+    awayScore: number
+  ) => {
+    debugger;
+    if (!selectedLeagueId || !currentUser) {
+      alert("Lütfen giriş yapın ve bir lig seçin.");
+      return;
     }
-    toast({
-        title: "Predictions Locked (Mock)!",
-        description: "Your predictions for this week are now locked locally.",
-        variant: "default",
-    });
-  }, [currentUser, selectedLeagueId, toast]);
+    try {
+      debugger;
+      const userId = currentUser.uid;
+      const predictionRef = ref(
+        database,
+        `leagues/${selectedLeagueId}/matches/${matchId}/results/${userId}`
+      );
+      await set(predictionRef, {
+        homeScore,
+        awayScore,
+      });
+      alert("Tahminin kaydedildi!");
 
+      // Kaydettikten sonra ilgili maçı güncelle:
+      setMatches(prev =>
+        prev.map(m =>
+          m.id === matchId
+            ? {
+                ...m,
+                userPrediction: {
+                  homeScoreGuess: homeScore,
+                  awayScoreGuess: awayScore,
+                },
+              }
+            : m
+        )
+      );
+    } catch (e) {
+      alert("Tahmin kaydedilemedi. Hata: " + (e as Error).message);
+    }
+  };
 
-  if (isLoadingData && currentUser && selectedLeagueId) { // Only show loading if we expect data for a user/league
-    return <div className="text-center py-10">Loading your predictions (mock)...</div>;
+  if (isLoadingData) {
+    return <div className="text-center py-10">Loading matches...</div>;
   }
 
   return (
-    <>
-      <PromotionalPopup isOpen={showPromo} onClose={handleClosePromo} />
-      <div>
-        <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2">
-                <Goal size={28} className="text-primary" />
-                <h2 className="text-2xl font-bold font-headline">Upcoming Matches</h2>
-            </div>
-            {!isLocked && currentUser && selectedLeagueId && ( // Show lock button only if logged in, league selected, and not locked
-                 <Button onClick={handleLockPredictionsLocal} variant="destructive">
-                    Lock Predictions
-                </Button>
-            )}
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-2">
+          <Goal size={28} className="text-primary" />
+          <h2 className="text-2xl font-bold font-headline">Upcoming Matches</h2>
         </div>
-
-        {isLocked && (
-          <div className="mb-6 p-4 bg-secondary text-secondary-foreground rounded-md shadow">
-            <p className="font-semibold">Predictions are locked for this gameweek (mock).</p>
-            <p className="text-sm">You can view your predictions on the 'My Predictions' page.</p>
-          </div>
-        )}
-        {matches.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {matches.map(match => (
-              <MatchCard
-                key={match.id}
-                match={match}
-                currentPrediction={predictions[match.id]}
-                onSavePrediction={handleSavePrediction}
-                isLocked={isLocked}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className="text-muted-foreground">No upcoming matches available at the moment.</p>
-        )}
       </div>
-    </>
+      {matches.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {matches.map(match => (
+            <MatchCard
+              key={match.id}
+              match={match}
+              currentPrediction={match.userPrediction}
+              onSavePrediction={handleSavePrediction}
+              // isLocked gibi diğer prop'lar da eklenebilir
+            />
+          ))}
+        </div>
+      ) : (
+        <p className="text-muted-foreground">No upcoming matches available at the moment.</p>
+      )}
+    </div>
   );
 }
-
-    

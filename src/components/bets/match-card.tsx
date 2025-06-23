@@ -1,5 +1,3 @@
-"use client";
-
 import React, { useState, useEffect, type FC } from "react";
 import Image from "next/image";
 import type { Match, UserPredictionInput } from "@/lib/types";
@@ -23,26 +21,37 @@ export const MatchCard: FC<MatchCardProps> = ({
   isLocked,
 }) => {
   const [homeGuess, setHomeGuess] = useState<string>(
-    currentPrediction?.homeScoreGuess?.toString() ?? ""
+    currentPrediction && currentPrediction.homeScoreGuess !== undefined
+      ? currentPrediction.homeScoreGuess.toString()
+      : ""
   );
   const [awayGuess, setAwayGuess] = useState<string>(
-    currentPrediction?.awayScoreGuess?.toString() ?? ""
+    currentPrediction && currentPrediction.awayScoreGuess !== undefined
+      ? currentPrediction.awayScoreGuess.toString()
+      : ""
   );
 
   useEffect(() => {
-    setHomeGuess(currentPrediction?.homeScoreGuess?.toString() ?? "");
-    setAwayGuess(currentPrediction?.awayScoreGuess?.toString() ?? "");
+    setHomeGuess(
+      currentPrediction && currentPrediction.homeScoreGuess !== undefined
+        ? currentPrediction.homeScoreGuess.toString()
+        : ""
+    );
+    setAwayGuess(
+      currentPrediction && currentPrediction.awayScoreGuess !== undefined
+        ? currentPrediction.awayScoreGuess.toString()
+        : ""
+    );
   }, [currentPrediction]);
 
   const handleSave = () => {
-    if (isLocked) return; // Should be handled by parent toast, but good to double check
+    if (isLocked) return;
 
     const homeScore = parseInt(homeGuess, 10);
     const awayScore = parseInt(awayGuess, 10);
 
     if (isNaN(homeScore) || homeScore < 0 || isNaN(awayScore) || awayScore < 0) {
-      // Basic validation, parent component (HomePage) shows a toast
-      // Consider showing a local error message or relying on parent's toast
+      alert("Geçersiz skor!");
       return;
     }
     onSavePrediction(match.id, homeScore, awayScore);
@@ -113,7 +122,6 @@ export const MatchCard: FC<MatchCardProps> = ({
               }}
               onChange={(e) => {
                 const val = e.target.value;
-                // Sadece rakam ve en fazla 2 karakter kontrolü
                 if (/^\d{0,2}$/.test(val)) {
                   setHomeGuess(val);
                 }
