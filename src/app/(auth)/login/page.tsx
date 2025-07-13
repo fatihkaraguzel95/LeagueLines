@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { signInWithEmailAndPassword, type FirebaseError } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useUser } from "@/context/UserContext";
+import Link from "next/link";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -126,10 +127,9 @@ export default function LoginPage() {
       <CardFooter className="text-center text-sm text-muted-foreground">
         <p>
           Don't have an account?{" "}
-          <a href="#" className="text-primary hover:underline">
+          <Link href="/signup" className="text-primary hover:underline">
             Sign up
-          </a>{" "}
-          (coming soon)
+          </Link>
         </p>
       </CardFooter>
     </Card>
